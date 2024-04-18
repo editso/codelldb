@@ -442,6 +442,10 @@ impl super::DebugSession {
 
         self.print_console_mode();
 
+        if let Some(commands) = &args_common.commands{
+            self.exec_local_commands("preLaunchDebuggerCommands", self.relative_path_base.as_path(), commands)?;
+        }
+
         if let Some(commands) = &args_common.init_commands {
             self.exec_commands("initCommands", &commands)?;
         }

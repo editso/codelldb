@@ -619,6 +619,32 @@ impl DebugSession {
         Ok(())
     }
 
+    fn exec_local_commands(&self, script_name: &str, base_dir: &Path, commands: &[LaunchDebuggerCommand]) -> Result<(), Error> {
+        self.console_message(format!("Executing script({:?}): {}", base_dir, script_name));
+
+        for command in commands {
+            self.console_message(format!("{} {}", command.program, command.arguments.join(" ")));
+
+            let output = std::process::Command::new(&command.program)
+                .args(&command.arguments)
+                .current_dir(base_dir)
+                .output()
+                .map_err(|e| std::io::Error::new(e.kind(), format!("[{}]{}: {}", script_name, command.program, e)))?;
+
+            if !output.stdout.is_empty() {
+                self.console_message(String::from_utf8_lossy(&output.stdout).into_owned())
+            }
+
+            if !output.stderr.is_empty() {
+                self.console_message(String::from_utf8_lossy(&output.stderr).into_owned())
+            }
+
+            self.console_message(format!("Exit code: {:?} ---- End \r\n", output.status));
+        }
+
+        Ok(())
+    }
+
     fn handle_configuration_done(&mut self) -> Result<(), Error> {
         // Signal to complete pending launch/attach tasks.
         log_errors!(self.configuration_done_sender.send(()));
@@ -711,7 +737,7 @@ impl DebugSession {
 
         Ok(StackTraceResponseBody {
             stack_frames: stack_frames,
-            total_frames: None
+            total_frames: None,
         })
     }
 

@@ -2,7 +2,7 @@ import {
     workspace, window, commands, debug, extensions,
     ExtensionContext, WorkspaceConfiguration, WorkspaceFolder, CancellationToken, ConfigurationScope,
     DebugConfigurationProvider, DebugConfiguration, DebugAdapterDescriptorFactory, DebugSession, DebugAdapterExecutable,
-    DebugAdapterDescriptor, Uri, ConfigurationTarget, DebugAdapterInlineImplementation
+    DebugAdapterDescriptor, Uri, ConfigurationTarget, DebugAdapterInlineImplementation,
 } from 'vscode';
 import { inspect } from 'util';
 import { ChildProcess } from 'child_process';
@@ -19,11 +19,12 @@ import { pickProcess } from './pickProcess';
 import { AdapterSettings } from './novsc/adapterMessages';
 import { ModuleTreeDataProvider as ModulesView } from './modulesView';
 import { ExcludedCallersView } from './excludedCallersView';
-import { mergeValues } from './novsc/expand';
+import { expandVariablesInObject, mergeValues } from './novsc/expand';
 import { pickSymbol } from './symbols';
 import { ReverseAdapterConnector } from './novsc/reverseConnector';
 import { UriLaunchServer, RpcLaunchServer } from './externalLaunch';
 import { AdapterSettingManager as AdapterSettingsManager } from './adapterSettings';
+import * as shlex from 'shlex'
 
 export let output = window.createOutputChannel('LLDB');
 
@@ -223,6 +224,57 @@ class Extension implements DebugConfigurationProvider, DebugAdapterDescriptorFac
         }
 
         launchConfig._adapterSettings = this.settingsManager.getAdapterSettings(folder);
+
+        let preLaunchDebuggerCommands: Array<string> = launchDefaults.get("commands")
+
+        if (preLaunchDebuggerCommands) {
+
+            let specialVariables: any = {
+                launchArgs: (launchConfig.args as any || []).join(" "),
+                launchTarget: launchConfig.program as any,
+            }
+
+            launchConfig.commands = preLaunchDebuggerCommands.map((command) => {
+
+                let platform = os.platform()
+                let shell = platform == 'win32' ? {
+                    target: "cmd",
+                    flags: ["/c"]
+                } : {
+                    target: "sh",
+                    flags: ["-c"]
+                }
+
+                let parsedCommands = shlex.split(expandVariablesInObject(command, (_, key) => {
+                    return specialVariables[key] ? specialVariables[key] : launchConfig[key]
+                }))
+
+                if (parsedCommands.length == 0) {
+                    throw Error("preLaunchDebuggerCommands: Invalid command `" + command + "`")
+                }
+
+                return {
+                    "program": shell.target,
+                    "arguments": [...shell.flags, parsedCommands.join(" ")]
+                }
+            })
+        }
+
+        let processCreateCommands: Array<string> = launchDefaults.get("processCreateCommands")
+
+        if (processCreateCommands) {
+
+            let commands = processCreateCommands.map((command) => {
+                return expandVariablesInObject(command, (_, key) => {
+                    return launchConfig[key]
+                })
+            })
+
+            launchConfig.processCreateCommands = Array.isArray(launchConfig.processCreateCommands) ? [
+                ...commands,
+                ...launchConfig.processCreateCommands,
+            ] : commands
+        }
 
         output.appendLine(`Resolved debug configuration: ${inspect(launchConfig)}`);
         return launchConfig;

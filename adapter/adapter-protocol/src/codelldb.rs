@@ -197,8 +197,16 @@ pub enum BreakpointMode {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct LaunchDebuggerCommand{
+    pub program: String,
+    pub arguments: Vec<String>
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CommonLaunchFields {
     pub name: Option<String>,
+    pub commands: Option<Vec<LaunchDebuggerCommand>>,
     pub stop_on_entry: Option<bool>,
     pub source_map: Option<VecMap<String, Option<String>>>,
     pub expressions: Option<Expressions>,
@@ -213,6 +221,7 @@ pub struct CommonLaunchFields {
     #[serde(rename = "_adapterSettings")]
     pub adapter_settings: Option<AdapterSettings>,
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchRequestArguments {
